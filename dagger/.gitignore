@@ -2,3 +2,4 @@
 /**/__pycache__
 /sdk
 /.env
+/src/dagger_gen.py

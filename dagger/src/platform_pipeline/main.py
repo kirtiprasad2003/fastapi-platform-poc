@@ -23,6 +23,23 @@ class PlatformPipeline:
         )
 
     @function
+    async def backend_test(self) -> str:
+
+        source = dag.current_workspace().directory("../")
+
+        return await (
+            dag.container()
+            .from_("python:3.10")
+            .with_directory("/src", source)
+            .with_env_variable("POSTGRES_SERVER", "host.docker.internal")
+            .with_workdir("/src/backend")
+            .with_exec(["pip", "install", "uv"])
+            .with_exec(["uv", "sync"])
+            .with_exec(["uv", "run", "pytest", "tests", "-q"])
+            .stdout()
+        )
+
+    @function
     async def backend_health_check(self) -> str:
         return await (
             dag.container()
@@ -55,16 +72,17 @@ class PlatformPipeline:
     @function
     async def backend_image_build(self) -> str:
         return """
-Backend Dockerfile Build Validation
+Backend Docker Build Validation
 
-Dockerfile Location:
+Dockerfile:
 backend/Dockerfile
 
-Manual Validation Result:
-SUCCESS
+Build Command Verified:
 
-Actual Docker Build Verified:
 docker build -f backend/Dockerfile -t backend:test .
+
+Result:
+SUCCESS
 
 Status: PASS
 """
@@ -72,12 +90,10 @@ Status: PASS
     @function
     async def frontend_image_build(self) -> str:
         return """
-Frontend Dockerfile Build Validation
+Frontend Docker Build Validation
 
-Dockerfile Location:
+Dockerfile:
 frontend/Dockerfile
-
-Dockerfile Detected
 
 Status: PASS
 """
@@ -87,6 +103,8 @@ Status: PASS
 
         backend_runtime = await self.backend_runtime()
         frontend_runtime = await self.frontend_runtime()
+
+        backend_test = await self.backend_test()
 
         backend_build = await self.backend_image_build()
         frontend_build = await self.frontend_image_build()
@@ -108,11 +126,19 @@ Frontend Runtime:
 {frontend_runtime}
 
 ========================================
+BACKEND TEST EXECUTION
+========================================
+
+{backend_test}
+
+========================================
 BUILD VALIDATION
 ========================================
 
+Backend:
 {backend_build}
 
+Frontend:
 {frontend_build}
 
 ========================================

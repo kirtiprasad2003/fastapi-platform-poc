@@ -1,0 +1,21 @@
+name: Trigger Platform Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  trigger-kestra:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Kestra webhook
+        run: |
+          curl -sf -X POST \
+            "${{ secrets.KESTRA_HOST }}/api/v1/executions/webhook/platform/platform-pipeline/${{ secrets.KESTRA_WEBHOOK_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{
+              "git_sha": "${{ github.sha }}",
+              "git_branch": "${{ github.ref_name }}",
+              "git_repo": "${{ github.repository }}"
+            }'

@@ -70,14 +70,17 @@ class PlatformPipeline:
         image = (
             dag.container()
             .from_("python:3.10")
-            .with_file("/bin/uv", uv_image.file("/uv"))
+            .with_file("/bin/uv",  uv_image.file("/uv"))
             .with_file("/bin/uvx", uv_image.file("/uvx"))
-            .with_env_variable("PYTHONUNBUFFERED", "1")
+            .with_env_variable("PYTHONUNBUFFERED",    "1")
             .with_env_variable("UV_COMPILE_BYTECODE", "1")
-            .with_env_variable("UV_LINK_MODE", "copy")
-            .with_env_variable("PATH", "/app/.venv/bin:/usr/local/bin:/usr/bin:/bin")
+            .with_env_variable("UV_LINK_MODE",        "copy")
+            .with_env_variable(
+                "PATH",
+                "/app/.venv/bin:/usr/local/bin:/usr/bin:/bin",
+            )
             .with_workdir("/app/")
-            .with_file("/app/uv.lock", source.file("uv.lock"))
+            .with_file("/app/uv.lock",       source.file("uv.lock"))
             .with_file("/app/pyproject.toml", source.file("pyproject.toml"))
             .with_exec([
                 "uv", "sync",
@@ -85,11 +88,11 @@ class PlatformPipeline:
                 "--no-install-workspace",
                 "--package", "app",
             ])
-            .with_directory("/app/backend/scripts", source.directory("backend/scripts"))
+            .with_directory("/app/backend/scripts",   source.directory("backend/scripts"))
             .with_file("/app/backend/pyproject.toml", source.file("backend/pyproject.toml"))
-            .with_file("/app/backend/alembic.ini", source.file("backend/alembic.ini"))
-            .with_directory("/app/backend/app", source.directory("backend/app"))
-            .with_directory("/app/backend/tests", source.directory("backend/tests"))
+            .with_file("/app/backend/alembic.ini",    source.file("backend/alembic.ini"))
+            .with_directory("/app/backend/app",       source.directory("backend/app"))
+            .with_directory("/app/backend/tests",     source.directory("backend/tests"))
             .with_exec([
                 "uv", "sync",
                 "--frozen",
@@ -99,17 +102,23 @@ class PlatformPipeline:
             .with_default_args(["fastapi", "run", "--workers", "4", "app/main.py"])
         )
 
+        # ── Push to registry if credentials provided ──
         if registry and registry_username and registry_password:
             image_ref = f"{registry}/{image_name}:{tag}"
             pushed = await (
                 image
-                .with_registry_auth(registry, await registry_username.plaintext(), registry_password)
+                .with_registry_auth(
+                    registry,
+                    await registry_username.plaintext(),
+                    registry_password,
+                )
                 .publish(image_ref)
             )
-            return f"Pushed: {pushed}"
+            return f"✅ Pushed: {pushed}"
 
+        # ── Local build only (no push) ──
         await image.sync()
-        return "Backend Docker Image Build Successful"
+        return "✅ Backend Docker Image Build Successful (local)"
 
     # ─────────────────────────────────────────────
     # Frontend Docker Image Build
@@ -131,9 +140,9 @@ class PlatformPipeline:
             dag.container()
             .from_("oven/bun:1")
             .with_workdir("/app")
-            .with_file("/app/package.json", source.file("package.json"))
-            .with_file("/app/bun.lock", source.file("bun.lock"))
-            .with_file("/app/frontend/package.json", source.file("frontend/package.json"))
+            .with_file("/app/package.json",          source.file("package.json"))
+            .with_file("/app/bun.lock",               source.file("bun.lock"))
+            .with_file("/app/frontend/package.json",  source.file("frontend/package.json"))
             .with_workdir("/app/frontend")
             .with_exec(["bun", "install"])
             .with_directory("/app/frontend", source.directory("frontend"))
@@ -161,17 +170,23 @@ class PlatformPipeline:
             )
         )
 
+        # ── Push to registry if credentials provided ──
         if registry and registry_username and registry_password:
             image_ref = f"{registry}/{image_name}:{tag}"
             pushed = await (
                 image
-                .with_registry_auth(registry, await registry_username.plaintext(), registry_password)
+                .with_registry_auth(
+                    registry,
+                    await registry_username.plaintext(),
+                    registry_password,
+                )
                 .publish(image_ref)
             )
-            return f"Pushed: {pushed}"
+            return f"✅ Pushed: {pushed}"
 
+        # ── Local build only (no push) ──
         await image.sync()
-        return "Frontend Docker Image Build Successful"
+        return "✅ Frontend Docker Image Build Successful (local)"
 
     # ─────────────────────────────────────────────
     # Health Checks
@@ -183,7 +198,7 @@ class PlatformPipeline:
             dag.container()
             .from_("curlimages/curl")
             .with_exec([
-                "curl", "-s",
+                "curl", "-sf",
                 "http://host.docker.internal:8000/api/v1/utils/health-check/",
             ])
             .stdout()
@@ -195,7 +210,7 @@ class PlatformPipeline:
             dag.container()
             .from_("curlimages/curl")
             .with_exec([
-                "curl", "-I",
+                "curl", "-sI",
                 "http://host.docker.internal:5173",
             ])
             .stdout()
@@ -203,7 +218,7 @@ class PlatformPipeline:
 
     # ─────────────────────────────────────────────
     # Dokploy Deploy
-    # FIX: x-api-key header + /api/trpc/ endpoint + {"json":{}} body format
+    # FIX: correct REST endpoint /api/application.redeploy
     # ─────────────────────────────────────────────
 
     @function
@@ -214,18 +229,20 @@ class PlatformPipeline:
         application_id: str,
     ) -> str:
         token = await dokploy_token.plaintext()
-        return await (
+        result = await (
             dag.container()
             .from_("curlimages/curl")
             .with_exec([
                 "curl", "-sf", "-X", "POST",
-                f"{dokploy_url}/api/trpc/application.deploy",
+                # ✅ FIXED: correct REST endpoint (not tRPC)
+                f"{dokploy_url}/api/application.redeploy",
                 "-H", "Content-Type: application/json",
                 "-H", f"x-api-key: {token}",
-                "-d", f'{{"json":{{"applicationId":"{application_id}"}}}}',
+                "-d", f'{{"applicationId":"{application_id}"}}',
             ])
             .stdout()
         )
+        return result or "✅ Deploy triggered (no response body)"
 
     @function
     async def dokploy_status(
@@ -240,7 +257,7 @@ class PlatformPipeline:
             .from_("curlimages/curl")
             .with_exec([
                 "curl", "-sf",
-                f"{dokploy_url}/api/trpc/application.one?input=%7B%22applicationId%22%3A%22{application_id}%22%7D",
+                f"{dokploy_url}/api/application.one?applicationId={application_id}",
                 "-H", f"x-api-key: {token}",
             ])
             .stdout()
@@ -266,18 +283,18 @@ class PlatformPipeline:
     ) -> str:
         results: list[str] = []
 
-        # 1. Runtime Validation
-        py_ver = await self.backend_runtime()
+        # ── 1. Runtime Validation ──
+        py_ver   = await self.backend_runtime()
         node_ver = await self.frontend_runtime()
         results.append(f"✓ Backend runtime:  {py_ver.strip()}")
         results.append(f"✓ Frontend runtime: {node_ver.strip()}")
 
-        # 2. Backend Tests
+        # ── 2. Backend Tests ──
         test_out = await self.backend_test()
-        summary = [l for l in test_out.strip().splitlines() if l.strip()][-1]
+        summary  = [l for l in test_out.strip().splitlines() if l.strip()][-1]
         results.append(f"✓ Tests: {summary}")
 
-        # 3. Docker Builds
+        # ── 3. Docker Builds ──
         backend_result = await self.backend_image_build(
             registry=registry,
             image_name=f"{org}/backend" if org else "backend",
@@ -297,18 +314,24 @@ class PlatformPipeline:
         )
         results.append(f"✓ {frontend_result}")
 
-        # 4. Dokploy Deploy
+        # ── 4. Dokploy Deploy ──
         if dokploy_url and dokploy_token:
             if backend_app_id:
-                deploy_out = await self.dokploy_deploy(dokploy_url, dokploy_token, backend_app_id)
-                results.append(f"✓ Dokploy backend deploy triggered: {deploy_out[:80]}")
+                deploy_out = await self.dokploy_deploy(
+                    dokploy_url, dokploy_token, backend_app_id
+                )
+                results.append(f"✓ Backend deploy: {deploy_out[:80]}")
             if frontend_app_id:
-                deploy_out = await self.dokploy_deploy(dokploy_url, dokploy_token, frontend_app_id)
-                results.append(f"✓ Dokploy frontend deploy triggered: {deploy_out[:80]}")
+                deploy_out = await self.dokploy_deploy(
+                    dokploy_url, dokploy_token, frontend_app_id
+                )
+                results.append(f"✓ Frontend deploy: {deploy_out[:80]}")
+        else:
+            results.append("⚠ Dokploy deploy skipped (no token/url provided)")
 
-        # 5. Health Checks
-        backend_health = await self.backend_health_check()
-        results.append(f"✓ Backend health: {backend_health.strip()}")
+        # ── 5. Health Checks ──
+        backend_health  = await self.backend_health_check()
+        results.append(f"✓ Backend health:  {backend_health.strip()}")
 
         frontend_health = await self.frontend_health_check()
         results.append(f"✓ Frontend health: {frontend_health.splitlines()[0]}")

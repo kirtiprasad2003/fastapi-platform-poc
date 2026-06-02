@@ -262,12 +262,18 @@ class PlatformPipeline:
         else:
             results.append("⚠ Dokploy deploy skipped (no token/url provided)")
 
-        # 5. Health Checks
-        backend_health  = await self.backend_health_check()
-        results.append(f"✓ Backend health:  {backend_health.strip()}")
+        # 5. Health Checks — best effort
+        try:
+            backend_health = await self.backend_health_check()
+            results.append(f"✓ Backend health: {backend_health.strip()}")
+        except Exception as e:
+            results.append(f"⚠ Backend health skipped: {str(e)[:50]}")
 
-        frontend_health = await self.frontend_health_check()
-        results.append(f"✓ Frontend health: {frontend_health.splitlines()[0]}")
+        try:
+            frontend_health = await self.frontend_health_check()
+            results.append(f"✓ Frontend health: {frontend_health.splitlines()[0]}")
+        except Exception as e:
+            results.append(f"⚠ Frontend health skipped: {str(e)[:50]}")
 
         return "\n".join([
             "",

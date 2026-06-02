@@ -158,7 +158,7 @@ class PlatformPipeline:
         )
 
     # ─────────────────────────────────────────────
-    # Dokploy Deploy (UPDATED)
+    # Dokploy Deploy (UPDATED with alpine + verbose)
     # ─────────────────────────────────────────────
 
     @function
@@ -171,19 +171,18 @@ class PlatformPipeline:
         token = await dokploy_token.plaintext()
         result = await (
             dag.container()
-            .from_("curlimages/curl")
+            .from_("alpine:3.19")
+            .with_exec(["apk", "add", "--no-cache", "curl"])
             .with_exec([
-                "curl", "-s", "-X", "POST",    # ← -sf se -s kiya, -f hataya
+                "curl", "-v", "-X", "POST",
                 f"{dokploy_url}/api/application.redeploy",
                 "-H", "Content-Type: application/json",
                 "-H", f"x-api-key: {token}",
                 "-d", f'{{"applicationId":"{application_id}"}}',
-                "--connect-timeout", "10",
-                "--max-time", "30",
             ])
             .stdout()
         )
-        return result or "✅ Deploy triggered (no response body)"
+        return result or "✅ Deploy triggered"
 
     @function
     async def dokploy_status(

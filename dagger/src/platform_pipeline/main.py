@@ -46,13 +46,12 @@ class PlatformPipeline:
         registry_password: Secret | None = None,
     ) -> str:
         source = dag.current_workspace().directory("../")
-        uv_image = dag.container().from_("ghcr.io/astral-sh/uv:0.9.26")
 
         image = (
             dag.container()
             .from_("python:3.10")
-            .with_file("/bin/uv",  uv_image.file("/uv"))
-            .with_file("/bin/uvx", uv_image.file("/uvx"))
+            # ✅ uv ko pip se install karo — with_file mat use karo
+            .with_exec(["pip", "install", "uv"])
             .with_env_variable("PYTHONUNBUFFERED",    "1")
             .with_env_variable("UV_COMPILE_BYTECODE", "1")
             .with_env_variable("UV_LINK_MODE",        "copy")

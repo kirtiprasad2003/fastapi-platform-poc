@@ -158,7 +158,7 @@ class PlatformPipeline:
         )
 
     # ─────────────────────────────────────────────
-    # Dokploy Deploy
+    # Dokploy Deploy (UPDATED)
     # ─────────────────────────────────────────────
 
     @function
@@ -173,11 +173,13 @@ class PlatformPipeline:
             dag.container()
             .from_("curlimages/curl")
             .with_exec([
-                "curl", "-sf", "-X", "POST",
+                "curl", "-s", "-X", "POST",    # ← -sf se -s kiya, -f hataya
                 f"{dokploy_url}/api/application.redeploy",
                 "-H", "Content-Type: application/json",
                 "-H", f"x-api-key: {token}",
                 "-d", f'{{"applicationId":"{application_id}"}}',
+                "--connect-timeout", "10",
+                "--max-time", "30",
             ])
             .stdout()
         )

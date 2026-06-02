@@ -144,7 +144,7 @@ class PlatformPipeline:
         return await (
             dag.container()
             .from_("curlimages/curl")
-            .with_exec(["curl", "-sf", "http://host.docker.internal:8000/api/v1/utils/health-check/"])
+            .with_exec(["curl", "-sf", "http://172.26.48.1:8000/api/v1/utils/health-check/",])
             .stdout()
         )
 
@@ -153,7 +153,7 @@ class PlatformPipeline:
         return await (
             dag.container()
             .from_("curlimages/curl")
-            .with_exec(["curl", "-sI", "http://host.docker.internal:5173"])
+            .with_exec(["curl", "-sI", "http://172.26.48.1:5173",])
             .stdout()
         )
 
